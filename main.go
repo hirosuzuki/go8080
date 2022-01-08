@@ -1,6 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
+	"log"
+
 	"github.com/hirosuzuki/go8080/i8080"
 )
 
@@ -29,7 +33,17 @@ func (m *IOPort) Write(addr uint16, value byte) {
 }
 
 func main() {
-	i := i8080.CPU{Memory: &Memory{}, IOPort: &IOPort{}}
-	i.Exec()
-	i8080.Add()
+	memory := &Memory{}
+	cpu := i8080.CPU{Memory: memory, IOPort: &IOPort{}}
+	cpu.Reset()
+	prog, err := ioutil.ReadFile("sample.bin")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for i := 0; i < len(prog); i++ {
+		memory.Write(uint16(i), prog[i])
+	}
+	cpu.Exec(100, func(p *i8080.CPU) {
+		fmt.Println(p.Status())
+	})
 }
