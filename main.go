@@ -23,16 +23,72 @@ func (m *Memory) Write(addr uint16, value byte) {
 	m.buf[addr] = value
 }
 
+/**
+ *      Used I/O ports:
+ *
+ *       0 - console status
+ *       1 - console data
+ *
+ *       2 - printer status
+ *       3 - printer data
+ *
+ *       4 - auxiliary status
+ *       5 - auxiliary data
+ *
+ *      10 - FDC drive
+ *      11 - FDC track
+ *      12 - FDC sector (low)
+ *      13 - FDC command
+ *      14 - FDC status
+ *
+ *      15 - DMA destination address low
+ *      16 - DMA destination address high
+ */
+
 type IOPort struct {
-	buf [65536]byte
+	consBuf uint8
+}
+
+func readChar() byte {
+	buf := make([]byte, 1)
+	bytes, _ := os.Stdin.Read(buf)
+	if bytes > 0 {
+		return buf[0]
+	}
+	return 0
+}
+
+func putChar(ch byte) {
+	var buf []byte = []byte{ch}
+	os.Stdout.Write(buf)
 }
 
 func (m *IOPort) Read(addr uint16) byte {
-	return m.buf[addr]
+	switch addr & 255 {
+	case 0: // console status
+		if m.consBuf > 0 {
+			return 255
+		}
+		m.consBuf = readChar()
+		if m.consBuf > 0 {
+			return 255
+		}
+	case 1: // console data
+		if m.consBuf > 0 {
+			r := m.consBuf
+			m.consBuf = 0
+			return r
+		}
+		return readChar()
+	}
+	return 0
 }
 
 func (m *IOPort) Write(addr uint16, value byte) {
-	m.buf[addr] = value
+	switch addr & 255 {
+	case 1: // console data
+		putChar(value)
+	}
 }
 
 func setRawMode() func() {
@@ -71,11 +127,12 @@ func main() {
 	for i := 0; i < len(prog); i++ {
 		memory.Write(uint16(i), prog[i])
 	}
-	cpu.Exec(100, func(p *i8080.CPU) {
-		fmt.Println(p.Status())
-	})
 
 	defer setRawMode()()
+
+	cpu.Exec(100, func(p *i8080.CPU) {
+		log.Println(p.Status())
+	})
 
 	for {
 		buf := make([]byte, 1)
