@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"syscall"
 
 	"github.com/hirosuzuki/go8080/i8080"
 	"golang.org/x/sys/unix"
@@ -45,8 +46,27 @@ func (m *Memory) Write(addr uint16, value byte) {
  *      16 - DMA destination address high
  */
 
+var DiskImage []byte
+
 type IOPort struct {
-	consBuf uint8
+	Memory      *Memory
+	DiskImage   *[]byte
+	ConsBuf     uint8
+	FdcDrive    uint8
+	FdcTrack    uint8
+	FdcSector   uint8
+	FdcStatus   uint8
+	DmaAddressL uint8
+	DmaAddressH uint8
+}
+
+func pollReadChar() bool {
+	var r syscall.FdSet
+	var ti syscall.Timeval
+	ti.Sec = 0
+	ti.Usec = 1
+	n, _ := syscall.Select(0, &r, nil, nil, &ti)
+	return n > 0
 }
 
 func readChar() byte {
@@ -66,20 +86,26 @@ func putChar(ch byte) {
 func (m *IOPort) Read(addr uint16) byte {
 	switch addr & 255 {
 	case 0: // console status
-		if m.consBuf > 0 {
+		if pollReadChar() {
 			return 255
 		}
-		m.consBuf = readChar()
-		if m.consBuf > 0 {
-			return 255
-		}
+		return 0
 	case 1: // console data
-		if m.consBuf > 0 {
-			r := m.consBuf
-			m.consBuf = 0
-			return r
-		}
-		return readChar()
+		ch := readChar()
+		return ch
+	case 10: // FDC drive
+		return m.FdcDrive
+	case 11: // FDC track
+		return m.FdcTrack
+	case 12: // FDC sector (low)
+		return m.FdcSector
+	case 13: // FDC command
+	case 14: // FDC status
+		return m.FdcStatus
+	case 15: // DMA destination address low
+		return m.DmaAddressL
+	case 16: // DMA destination address high
+		return m.DmaAddressH
 	}
 	return 0
 }
@@ -88,6 +114,41 @@ func (m *IOPort) Write(addr uint16, value byte) {
 	switch addr & 255 {
 	case 1: // console data
 		putChar(value)
+	case 10: // FDC drive
+		m.FdcDrive = value
+	case 11: // FDC track
+		m.FdcTrack = value
+	case 12: // FDC sector (low)
+		m.FdcSector = value
+	case 13: // FDC command
+		m.FdcStatus = 0
+		if m.FdcTrack > 77 {
+			m.FdcStatus = 2
+			return
+		}
+		if m.FdcSector > 26 {
+			m.FdcStatus = 3
+			return
+		}
+		pos := (int(m.FdcTrack)*26 + int(m.FdcSector) - 1) * 128
+		addr := (uint16(m.DmaAddressH) << 8) + uint16(m.DmaAddressL)
+		switch value {
+		case 0: // read
+			log.Printf("Disk Read %06X -> %04X\n", pos, addr)
+			for i := 0; i < 128; i++ {
+				m.Memory.buf[addr+uint16(i)] = (*m.DiskImage)[pos+i]
+			}
+		case 1: // write
+			log.Printf("Disk Write %06X <- %04X\n", pos, addr)
+			for i := 0; i < 128; i++ {
+				(*m.DiskImage)[pos+i] = m.Memory.buf[addr+uint16(i)]
+			}
+		}
+	case 14: // FDC status
+	case 15: // DMA destination address low
+		m.DmaAddressL = value
+	case 16: // DMA destination address high
+		m.DmaAddressH = value
 	}
 }
 
@@ -103,7 +164,13 @@ func setRawMode() func() {
 
 	backup := *termios
 
-	termios.Lflag &^= unix.ECHO | unix.ICANON | unix.ISIG
+	termios.Iflag &^= unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON
+	termios.Oflag &^= unix.OPOST
+	termios.Lflag &^= unix.ECHO | unix.ECHONL | unix.ICANON | unix.ISIG | unix.IEXTEN
+	termios.Cflag &^= unix.CSIZE | unix.PARENB
+	termios.Cflag |= unix.CS8
+	termios.Cc[unix.VMIN] = 1
+	termios.Cc[unix.VTIME] = 0
 
 	if err := unix.IoctlSetTermios(0, ioctlWriteTermios, termios); err != nil {
 		log.Fatal(err)
@@ -117,28 +184,41 @@ func setRawMode() func() {
 }
 
 func main() {
-	memory := &Memory{}
-	cpu := i8080.CPU{Memory: memory, IOPort: &IOPort{}}
-	cpu.Reset()
-	prog, err := ioutil.ReadFile("sample.bin")
+
+	if len(os.Args) < 2 {
+		fmt.Printf("Usage: %s %v DiskImage\n", os.Args[0], os.Args)
+		os.Exit(1)
+	}
+
+	prog, err := ioutil.ReadFile(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
 	}
-	for i := 0; i < len(prog); i++ {
-		memory.Write(uint16(i), prog[i])
-	}
+	log.Printf("Load %s (%d bytes)\n", os.Args[1], len(prog))
 
 	defer setRawMode()()
 
-	cpu.Exec(100, func(p *i8080.CPU) {
-		log.Println(p.Status())
-	})
+	memory := &Memory{}
+	progsize := len(prog)
+	if progsize > 256 {
+		progsize = 256
+	}
+	for i := 0; i < progsize; i++ {
+		memory.Write(uint16(i), prog[i])
+	}
+
+	io := &IOPort{}
+	io.Memory = memory
+	io.DiskImage = &prog
+
+	cpu := i8080.CPU{Memory: memory, IOPort: io}
+	cpu.Reset()
 
 	for {
-		buf := make([]byte, 1)
-		n, err := os.Stdin.Read(buf)
-		fmt.Println(buf[0], n, err)
-		if buf[0] == 'e' {
+		cpu.Exec(10000, func(p *i8080.CPU) {
+			log.Println(p.Status())
+		})
+		if cpu.Halted {
 			break
 		}
 	}
