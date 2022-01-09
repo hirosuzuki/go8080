@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/hirosuzuki/go8080/i8080"
+	"github.com/pkg/profile"
 	"golang.org/x/sys/unix"
 )
 
@@ -134,12 +135,12 @@ func (m *IOPort) Write(addr uint16, value byte) {
 		addr := (uint16(m.DmaAddressH) << 8) + uint16(m.DmaAddressL)
 		switch value {
 		case 0: // read
-			log.Printf("Disk Read %06X -> %04X\n", pos, addr)
+			// log.Printf("Disk Read %06X -> %04X\n", pos, addr)
 			for i := 0; i < 128; i++ {
 				m.Memory.buf[addr+uint16(i)] = (*m.DiskImage)[pos+i]
 			}
 		case 1: // write
-			log.Printf("Disk Write %06X <- %04X\n", pos, addr)
+			// log.Printf("Disk Write %06X <- %04X\n", pos, addr)
 			for i := 0; i < 128; i++ {
 				(*m.DiskImage)[pos+i] = m.Memory.buf[addr+uint16(i)]
 			}
@@ -184,6 +185,9 @@ func setRawMode() func() {
 }
 
 func main() {
+	tmpDirName := "/tmp"
+	profilerHandle := profile.Start(profile.ProfilePath(tmpDirName), profile.NoShutdownHook)
+	defer profilerHandle.Stop()
 
 	if len(os.Args) < 2 {
 		fmt.Printf("Usage: %s %v DiskImage\n", os.Args[0], os.Args)
@@ -200,8 +204,8 @@ func main() {
 
 	memory := &Memory{}
 	progsize := len(prog)
-	if progsize > 256 {
-		progsize = 256
+	if progsize > 0x2000 {
+		progsize = 0x2000
 	}
 	for i := 0; i < progsize; i++ {
 		memory.Write(uint16(i), prog[i])
@@ -216,7 +220,6 @@ func main() {
 
 	for {
 		cpu.Exec(10000, func(p *i8080.CPU) {
-			log.Println(p.Status())
 		})
 		if cpu.Halted {
 			break

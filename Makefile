@@ -1,7 +1,13 @@
 all: go8080 sample.bin
 
 run: go8080 sample.bin
-	./go8080
+	./go8080 sample.bin
+
+cpm: go8080
+	./go8080 cpm13.dsk
+
+cpm: go8080
+	./go8080 cpm13.dsk
 
 clean:
 	rm go8080 sample.bin
