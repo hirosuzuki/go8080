@@ -2,8 +2,6 @@ package i8080
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 )
 
@@ -296,9 +294,12 @@ type IO64K interface {
 }
 
 type CPU struct {
-	Memory IO64K
-	IOPort IO64K
-	Reg    struct {
+	Memory       IO64K
+	IOPort       IO64K
+	CanInterrupt bool
+	Halted       bool
+	FetchCount   int
+	Reg          struct {
 		PC uint16
 		SP uint16
 		B  uint8
@@ -310,8 +311,6 @@ type CPU struct {
 		A  uint8
 		F  uint8
 	}
-	CanInterrupt bool
-	Halted       bool
 }
 
 func (p *CPU) Read16(addr uint16) uint16 {
@@ -663,6 +662,7 @@ func (p *CPU) Op() {
 	// https://pastraiser.com/cpu/i8080/i8080_opcodes.html
 	// http://dunfield.classiccmp.org/r/8080.txt
 	op := p.Fetch8()
+	p.FetchCount += OpcodeTable[op].bytes
 	op6 := op & 0x3f
 	switch op >> 6 {
 	case 0:
@@ -892,6 +892,7 @@ func (p *CPU) Op() {
 func (p *CPU) Reset() {
 	p.CanInterrupt = true
 	p.Halted = false
+	p.FetchCount = 0
 	p.Reg.PC = 0
 	p.Reg.SP = 0
 	p.Reg.A = 0
@@ -904,7 +905,16 @@ func (p *CPU) Reset() {
 	p.Reg.L = 0
 }
 
-func (p *CPU) Exec(n int, debugFuc func(*CPU)) {
+func (p *CPU) Interrupt(addr uint16) {
+	if p.CanInterrupt {
+		p.CanInterrupt = false
+		p.Push16(p.GetPC())
+		p.SetPC(addr)
+	}
+}
+
+func (p *CPU) Exec(n int, debugFuc func(*CPU)) int {
+	startFetchCount := p.FetchCount
 	for i := 0; i < n; i++ {
 		if debugFuc != nil {
 			debugFuc(p)
@@ -914,9 +924,8 @@ func (p *CPU) Exec(n int, debugFuc func(*CPU)) {
 			break
 		}
 	}
+	return p.FetchCount - startFetchCount
 }
-
-//	A=00 F=00 SZAPC BC=0000 DE=0000 HL=0000 [00] SP=0000 PC=0000 | 31 00 00 | LXI SP,$0000
 
 func (p *CPU) Status() string {
 	hl := uint16(p.Reg.L) | (uint16(p.Reg.H) << 8)
@@ -965,14 +974,4 @@ func (p *CPU) Status() string {
 	stacktop1 := p.Memory.Read(p.Reg.SP + 1)
 	s := fmt.Sprintf("A=%02X F=%02X %s BC=%02X%02X DE=%02X%02X HL=%04X [%02X] SP=%04X [%02X%02X] PC=%04X | %-9s| %s", p.Reg.A, f, sf, p.Reg.B, p.Reg.C, p.Reg.D, p.Reg.E, hl, m, p.Reg.SP, stacktop1, stacktop0, p.Reg.PC, ops, mnemonic)
 	return s
-}
-
-func Add() {
-	arg1, _ := strconv.Atoi(os.Args[1])
-	arg2, _ := strconv.Atoi(os.Args[2])
-	arg3, _ := strconv.Atoi(os.Args[3])
-	r, c8, c4 := op_adc(uint8(arg1), uint8(arg2), uint8(arg3))
-	fmt.Println("adc", arg1, arg2, arg3, "->", r, c8, c4)
-	r, c8, c4 = op_sbc(uint8(arg1), uint8(arg2), uint8(arg3))
-	fmt.Println("sbc", arg1, arg2, arg3, "->", r, c8, c4)
 }

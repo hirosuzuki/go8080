@@ -2,3 +2,6 @@ bk/
 *.bin
 *.sym
 go8080
+*.log
+*.dsk
+*.rom

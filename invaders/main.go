@@ -1,5 +1,9 @@
 package main
 
+// https://www.computerarcheology.com/Arcade/SpaceInvaders/
+// https://github.com/JimKnowler/SpaceInvaders8080/blob/master/src/main.cpp
+// https://qiita.com/zakuroishikuro/items/15d1a69178895edf9a21
+
 import (
 	"fmt"
 	"io/ioutil"
@@ -24,6 +28,8 @@ func (m *Memory) Write(addr uint16, value byte) {
 }
 
 type IOPort struct {
+	shiftOffset uint8
+	shiftData   uint16
 }
 
 func pollReadChar() bool {
@@ -51,22 +57,18 @@ func putChar(ch byte) {
 
 func (m *IOPort) Read(addr uint16) byte {
 	switch addr & 255 {
-	case 0: // console status
-		if pollReadChar() {
-			return 255
-		}
-		return 0
-	case 1: // console data
-		ch := readChar()
-		return ch
+	case 3: // shift register read
+		return uint8(m.shiftData << uint16(m.shiftOffset&7) >> 8)
 	}
 	return 0
 }
 
 func (m *IOPort) Write(addr uint16, value byte) {
 	switch addr & 255 {
-	case 1: // console data
-		putChar(value)
+	case 2: // shift register offset
+		m.shiftOffset = value
+	case 4: // push to high byte of shift register
+		m.shiftData = (m.shiftData >> 8) | (uint16(value) << 8)
 	}
 }
 
@@ -82,10 +84,8 @@ func setRawMode() func() {
 
 	backup := *termios
 
-	termios.Iflag &^= unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON
-	termios.Oflag &^= unix.OPOST
-	termios.Lflag &^= unix.ECHO | unix.ECHONL | unix.ICANON | unix.ISIG | unix.IEXTEN
-	termios.Cflag &^= unix.CSIZE | unix.PARENB
+	termios.Lflag &^= unix.ECHO | unix.ECHONL | unix.ICANON
+	termios.Cflag &^= unix.CSIZE
 	termios.Cflag |= unix.CS8
 	termios.Cc[unix.VMIN] = 1
 	termios.Cc[unix.VTIME] = 0
@@ -102,12 +102,7 @@ func setRawMode() func() {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Printf("Usage: %s binary\n", os.Args[0])
-		os.Exit(1)
-	}
-
-	binary, err := ioutil.ReadFile(os.Args[1])
+	binary, err := ioutil.ReadFile("invaders.rom")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -123,10 +118,47 @@ func main() {
 
 	cpu := i8080.CPU{Memory: memory, IOPort: io}
 	cpu.Reset()
+	counter := 0
+
+	width := 112
+	height := 64
+	var buf []rune = make([]rune, (width+1)*height)
+	for y := 0; y < height-1; y++ {
+		buf[y*(width+1)+width] = rune(10)
+	}
 
 	for {
-		cpu.Exec(20000, func(p *i8080.CPU) {
+		cpu.Exec(10000, func(p *i8080.CPU) {
+			// log.Println(p.Status())
 		})
+		counter += 1
+
+		if counter%2 == 0 {
+			cpu.Interrupt(0x08)
+		} else {
+			cpu.Interrupt(0x10)
+		}
+
+		if counter%2 == 0 {
+			for i := 0; i < 112; i++ {
+				for j := 0; j < 32; j++ {
+					m1 := memory.buf[0x2400+i*2*32+j]
+					m2 := memory.buf[0x2400+i*2*32+32+j]
+					m := (m1 & 0x08 >> 3) | (m1 & 0x04 >> 1) | (m1 & 0x02 << 1) | (m1 & 0x01 << 6) | (m2 & 0x08 >> 0) | (m2 & 0x04 << 2) | (m2 & 0x02 << 4) | (m2 & 0x01 << 7)
+					buf[((31-j)*2+1)*(width+1)+i] = rune(0x2800 + int(m))
+					m1 = m1 >> 4
+					m2 = m2 >> 4
+					m = (m1 & 0x08 >> 3) | (m1 & 0x04 >> 1) | (m1 & 0x02 << 1) | (m1 & 0x01 << 6) | (m2 & 0x08 >> 0) | (m2 & 0x04 << 2) | (m2 & 0x02 << 4) | (m2 & 0x01 << 7)
+					buf[((31-j)*2+0)*(width+1)+i] = rune(0x2800 + int(m))
+				}
+			}
+
+			// https://rosettacode.org/wiki/Terminal_control/Hiding_the_cursor#Go
+			fmt.Print("\x1b[?25l\033[0;0H")
+			fmt.Print(string(buf), counter)
+			fmt.Print("\x1b[?25h")
+		}
+
 		if cpu.Halted {
 			break
 		}
