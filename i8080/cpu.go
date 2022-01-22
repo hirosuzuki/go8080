@@ -299,6 +299,7 @@ type CPU struct {
 	CanInterrupt bool
 	Halted       bool
 	FetchCount   int
+	Instructions int
 	Reg          struct {
 		PC uint16
 		SP uint16
@@ -408,7 +409,7 @@ func (p *CPU) GetF() uint8 {
 }
 
 func (p *CPU) SetF(v uint8) {
-	p.Reg.F = v
+	p.Reg.F = v&0xd7 | 0x02
 }
 
 func (p *CPU) GetBC() uint16 {
@@ -443,7 +444,7 @@ func (p *CPU) GetAF() uint16 {
 }
 
 func (p *CPU) SetAF(v uint16) {
-	p.Reg.F = uint8(v)
+	p.Reg.F = uint8(v&0xd7 | 0x02)
 	p.Reg.A = uint8(v >> 8)
 }
 
@@ -609,7 +610,7 @@ func op_sbc(v1 uint8, v2 uint8, v3 uint8) (uint8, uint8, uint8) {
 	result := value1 - value2 - value3
 	xorval := result ^ value1 ^ value2
 	// fmt.Println(value1, value2, value3, result, xorval)
-	hcarry := xorval & 16
+	hcarry := (xorval & 16) ^ 16 // ???
 	carry := (xorval >> 8) & 1
 	return uint8(result), uint8(carry), uint8(hcarry)
 }
@@ -638,9 +639,11 @@ func (p *CPU) Op8(n uint8, v uint8) {
 		p.SetF(FlagTable[r] | c | hc)
 	case 4:
 		// ANA R0 / ANI n
-		var r uint8 = p.GetA() & v
+		a := p.GetA()
+		r := a & v
 		p.SetA(r)
-		p.SetF(FlagTable[r])
+		hcarry := ((a | v) & 0x08) << 1
+		p.SetF(FlagTable[r] | hcarry)
 	case 5:
 		// XRA R0 / XRI n
 		var r uint8 = p.GetA() ^ v
@@ -695,12 +698,21 @@ func (p *CPU) Op() {
 			// INR
 			v := p.GetR8(op6>>3) + 1
 			p.SetR8(op6>>3, v)
-			p.SetF(FlagTable[v])
+			var hcarry uint8 = 0
+			if (v & 15) == 0 {
+				hcarry = 0x10
+			}
+			p.SetF(FlagTable[v] | hcarry | (p.GetF() & 1))
 		case 5, 13:
 			// DCR
 			v := p.GetR8(op6>>3) - 1
 			p.SetR8(op6>>3, v)
-			p.SetF(FlagTable[v])
+			// ???
+			var hcarry uint8 = 0x10
+			if (v & 15) == 15 {
+				hcarry = 0x00
+			}
+			p.SetF(FlagTable[v] | hcarry | (p.GetF() & 1))
 		case 6, 14:
 			// MVI
 			v := p.Fetch8()
@@ -735,16 +747,17 @@ func (p *CPU) Op() {
 				// DAA
 				a := p.GetA()
 				f := p.GetF()
+				var adj uint8 = 0
 				if (f&0x10) != 0 || (a&0x0f) >= 0x0a {
-					a += 0x06
-					f |= 0x10
+					adj += 0x06
 				}
-				if (f&0x01) != 0 || (a&0xf0) >= 0xa0 {
-					a += 0x60
+				if (f&0x01) != 0 || (a&0xf0) >= 0xa0 || ((a&0xf0) >= 0x90 && (a&0x0f) >= 0x0a) {
+					adj += 0x60
 					f |= 0x01
 				}
-				p.SetA(a)
-				p.SetF(FlagTable[a] | (f & 0x11))
+				r, _, hc := op_adc(a, adj, 0)
+				p.SetA(r)
+				p.SetF(FlagTable[r] | (f & 0x01) | hc)
 			case 5:
 				// CMA
 				p.SetA(p.GetA() ^ 0xff)
@@ -887,12 +900,14 @@ func (p *CPU) Op() {
 			}
 		}
 	}
+	p.Instructions += 1
 }
 
 func (p *CPU) Reset() {
 	p.CanInterrupt = true
 	p.Halted = false
 	p.FetchCount = 0
+	p.Instructions = 0
 	p.Reg.PC = 0
 	p.Reg.SP = 0
 	p.Reg.A = 0
@@ -972,6 +987,6 @@ func (p *CPU) Status() string {
 
 	stacktop0 := p.Memory.Read(p.Reg.SP)
 	stacktop1 := p.Memory.Read(p.Reg.SP + 1)
-	s := fmt.Sprintf("A=%02X F=%02X %s BC=%02X%02X DE=%02X%02X HL=%04X [%02X] SP=%04X [%02X%02X] PC=%04X | %-9s| %s", p.Reg.A, f, sf, p.Reg.B, p.Reg.C, p.Reg.D, p.Reg.E, hl, m, p.Reg.SP, stacktop1, stacktop0, p.Reg.PC, ops, mnemonic)
+	s := fmt.Sprintf("%08d A=%02X F=%02X %s BC=%02X%02X DE=%02X%02X HL=%04X [%02X] SP=%04X [%02X%02X] PC=%04X | %-9s| %s", p.Instructions, p.Reg.A, f, sf, p.Reg.B, p.Reg.C, p.Reg.D, p.Reg.E, hl, m, p.Reg.SP, stacktop1, stacktop0, p.Reg.PC, ops, mnemonic)
 	return s
 }
