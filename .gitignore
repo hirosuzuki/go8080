@@ -1,7 +1,6 @@
 bk/
-*.bin
 *.sym
-go8080
 *.log
-*.dsk
-*.rom
+cpm
+invaders
+tester

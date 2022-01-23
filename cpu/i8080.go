@@ -1,4 +1,4 @@
-package i8080
+package cpu
 
 import (
 	"fmt"
@@ -293,7 +293,7 @@ type IO64K interface {
 	Write(addr uint16, value byte)
 }
 
-type CPU struct {
+type Intel8080 struct {
 	Memory       IO64K
 	IOPort       IO64K
 	CanInterrupt bool
@@ -314,179 +314,127 @@ type CPU struct {
 	}
 }
 
-func (p *CPU) Read16(addr uint16) uint16 {
+func (p *Intel8080) Read16(addr uint16) uint16 {
 	nn := uint16(p.Memory.Read(addr)) | uint16(p.Memory.Read(addr+1))<<8
 	return nn
 }
 
-func (p *CPU) Write16(addr uint16, v uint16) {
+func (p *Intel8080) Write16(addr uint16, v uint16) {
 	p.Memory.Write(addr, uint8(v))
 	p.Memory.Write(addr+1, uint8(v>>8))
 }
 
-func (p *CPU) Fetch8() uint8 {
+func (p *Intel8080) Fetch8() uint8 {
 	n := p.Memory.Read(p.Reg.PC)
 	p.Reg.PC++
 	return n
 }
 
-func (p *CPU) Fetch16() uint16 {
+func (p *Intel8080) Fetch16() uint16 {
 	nn := uint16(p.Memory.Read(p.Reg.PC)) | uint16(p.Memory.Read(p.Reg.PC+1))<<8
 	p.Reg.PC += 2
 	return nn
 }
 
-func (p *CPU) Pop16() uint16 {
+func (p *Intel8080) Pop16() uint16 {
 	nn := uint16(p.Memory.Read(p.Reg.SP)) | uint16(p.Memory.Read(p.Reg.SP+1))<<8
 	p.Reg.SP += 2
 	return nn
 }
 
-func (p *CPU) Push16(v uint16) {
+func (p *Intel8080) Push16(v uint16) {
 	p.Reg.SP -= 2
 	p.Memory.Write(p.Reg.SP, uint8(v))
 	p.Memory.Write(p.Reg.SP+1, uint8(v>>8))
 }
 
-func (p *CPU) GetB() uint8 {
-	return p.Reg.B
-}
-
-func (p *CPU) SetB(v uint8) {
+func (p *Intel8080) SetB(v uint8) {
 	p.Reg.B = v
 }
 
-func (p *CPU) GetC() uint8 {
-	return p.Reg.C
-}
-
-func (p *CPU) SetC(v uint8) {
+func (p *Intel8080) SetC(v uint8) {
 	p.Reg.C = v
 }
 
-func (p *CPU) GetD() uint8 {
-	return p.Reg.D
-}
-
-func (p *CPU) SetD(v uint8) {
+func (p *Intel8080) SetD(v uint8) {
 	p.Reg.D = v
 }
 
-func (p *CPU) GetE() uint8 {
-	return p.Reg.E
-}
-
-func (p *CPU) SetE(v uint8) {
+func (p *Intel8080) SetE(v uint8) {
 	p.Reg.E = v
 }
 
-func (p *CPU) GetH() uint8 {
-	return p.Reg.H
-}
-
-func (p *CPU) SetH(v uint8) {
+func (p *Intel8080) SetH(v uint8) {
 	p.Reg.H = v
 }
 
-func (p *CPU) GetL() uint8 {
-	return p.Reg.L
-}
-
-func (p *CPU) SetL(v uint8) {
+func (p *Intel8080) SetL(v uint8) {
 	p.Reg.L = v
 }
 
-func (p *CPU) GetA() uint8 {
-	return p.Reg.A
-}
-
-func (p *CPU) SetA(v uint8) {
+func (p *Intel8080) SetA(v uint8) {
 	p.Reg.A = v
 }
 
-func (p *CPU) GetF() uint8 {
-	return p.Reg.F
-}
-
-func (p *CPU) SetF(v uint8) {
+func (p *Intel8080) SetF(v uint8) {
 	p.Reg.F = v&0xd7 | 0x02
 }
 
-func (p *CPU) GetBC() uint16 {
-	return uint16(p.Reg.C) + (uint16(p.Reg.B) << 8)
-}
-
-func (p *CPU) SetBC(v uint16) {
+func (p *Intel8080) SetBC(v uint16) {
 	p.Reg.C = uint8(v)
 	p.Reg.B = uint8(v >> 8)
 }
 
-func (p *CPU) GetDE() uint16 {
-	return uint16(p.Reg.E) + (uint16(p.Reg.D) << 8)
-}
-
-func (p *CPU) SetDE(v uint16) {
+func (p *Intel8080) SetDE(v uint16) {
 	p.Reg.E = uint8(v)
 	p.Reg.D = uint8(v >> 8)
 }
 
-func (p *CPU) GetHL() uint16 {
-	return uint16(p.Reg.L) + (uint16(p.Reg.H) << 8)
-}
-
-func (p *CPU) SetHL(v uint16) {
+func (p *Intel8080) SetHL(v uint16) {
 	p.Reg.L = uint8(v)
 	p.Reg.H = uint8(v >> 8)
 }
 
-func (p *CPU) GetAF() uint16 {
+func (p *Intel8080) GetAF() uint16 {
 	return uint16(p.Reg.F) + (uint16(p.Reg.A) << 8)
 }
 
-func (p *CPU) SetAF(v uint16) {
+func (p *Intel8080) SetAF(v uint16) {
 	p.Reg.F = uint8(v&0xd7 | 0x02)
 	p.Reg.A = uint8(v >> 8)
 }
 
-func (p *CPU) GetSP() uint16 {
-	return p.Reg.SP
-}
-
-func (p *CPU) SetSP(v uint16) {
+func (p *Intel8080) SetSP(v uint16) {
 	p.Reg.SP = v
 }
 
-func (p *CPU) GetPC() uint16 {
-	return p.Reg.PC
-}
-
-func (p *CPU) SetPC(v uint16) {
+func (p *Intel8080) SetPC(v uint16) {
 	p.Reg.PC = v
 }
 
-func (p *CPU) GetR8(n uint8) uint8 {
+func (p *Intel8080) GetR8(n uint8) uint8 {
 	switch n {
 	case 0:
-		return p.GetB()
+		return p.Reg.B
 	case 1:
-		return p.GetC()
+		return p.Reg.C
 	case 2:
-		return p.GetD()
+		return p.Reg.D
 	case 3:
-		return p.GetE()
+		return p.Reg.E
 	case 4:
-		return p.GetH()
+		return p.Reg.H
 	case 5:
-		return p.GetL()
+		return p.Reg.L
 	case 6:
-		return p.Memory.Read(p.GetHL())
+		return p.Memory.Read(uint16(p.Reg.L) + (uint16(p.Reg.H) << 8))
 	case 7:
-		return p.GetA()
+		return p.Reg.A
 	}
 	return 0
 }
 
-func (p *CPU) SetR8(n uint8, v uint8) {
+func (p *Intel8080) SetR8(n uint8, v uint8) {
 	switch n {
 	case 0:
 		p.SetB(v)
@@ -501,27 +449,39 @@ func (p *CPU) SetR8(n uint8, v uint8) {
 	case 5:
 		p.SetL(v)
 	case 6:
-		p.Memory.Write(p.GetHL(), v)
+		p.Memory.Write(uint16(p.Reg.L)+(uint16(p.Reg.H)<<8), v)
 	case 7:
 		p.SetA(v)
 	}
 }
 
-func (p *CPU) GetR16(n uint8) uint16 {
+func (p *Intel8080) GetBC() uint16 {
+	return uint16(p.Reg.C) + (uint16(p.Reg.B) << 8)
+}
+
+func (p *Intel8080) GetDE() uint16 {
+	return uint16(p.Reg.E) + (uint16(p.Reg.D) << 8)
+}
+
+func (p *Intel8080) GetHL() uint16 {
+	return uint16(p.Reg.L) + (uint16(p.Reg.H) << 8)
+}
+
+func (p *Intel8080) GetR16(n uint8) uint16 {
 	switch n {
 	case 0:
-		return p.GetBC()
+		return uint16(p.Reg.C) + (uint16(p.Reg.B) << 8)
 	case 1:
-		return p.GetDE()
+		return uint16(p.Reg.E) + (uint16(p.Reg.D) << 8)
 	case 2:
-		return p.GetHL()
+		return uint16(p.Reg.L) + (uint16(p.Reg.H) << 8)
 	case 3:
-		return p.GetSP()
+		return p.Reg.SP
 	}
 	return 0
 }
 
-func (p *CPU) SetR16(n uint8, v uint16) {
+func (p *Intel8080) SetR16(n uint8, v uint16) {
 	switch n {
 	case 0:
 		p.SetBC(v)
@@ -534,21 +494,21 @@ func (p *CPU) SetR16(n uint8, v uint16) {
 	}
 }
 
-func (p *CPU) GetR16S(n uint8) uint16 {
+func (p *Intel8080) GetR16S(n uint8) uint16 {
 	switch n {
 	case 0:
-		return p.GetBC()
+		return uint16(p.Reg.C) + (uint16(p.Reg.B) << 8)
 	case 1:
-		return p.GetDE()
+		return uint16(p.Reg.E) + (uint16(p.Reg.D) << 8)
 	case 2:
-		return p.GetHL()
+		return uint16(p.Reg.L) + (uint16(p.Reg.H) << 8)
 	case 3:
 		return p.GetAF()
 	}
 	return 0
 }
 
-func (p *CPU) SetR16S(n uint8, v uint16) {
+func (p *Intel8080) SetR16S(n uint8, v uint16) {
 	switch n {
 	case 0:
 		p.SetBC(v)
@@ -561,7 +521,7 @@ func (p *CPU) SetR16S(n uint8, v uint16) {
 	}
 }
 
-func (p *CPU) CC(n uint8) bool {
+func (p *Intel8080) CC(n uint8) bool {
 	switch n {
 	case 0: // NZ
 		return p.Reg.F&0x40 == 0
@@ -583,11 +543,11 @@ func (p *CPU) CC(n uint8) bool {
 	return false
 }
 
-func (p *CPU) DisableInterrupt() {
+func (p *Intel8080) DisableInterrupt() {
 	p.CanInterrupt = false
 }
 
-func (p *CPU) EnableInterrupt() {
+func (p *Intel8080) EnableInterrupt() {
 	p.CanInterrupt = true
 }
 
@@ -597,7 +557,6 @@ func op_adc(v1 uint8, v2 uint8, v3 uint8) (uint8, uint8, uint8) {
 	value3 := uint16(v3)
 	result := value1 + value2 + value3
 	xorval := result ^ value1 ^ value2
-	// fmt.Println(value1, value2, value3, result, xorval)
 	hcarry := xorval & 16
 	carry := (xorval >> 8) & 1
 	return uint8(result), uint8(carry), uint8(hcarry)
@@ -609,59 +568,58 @@ func op_sbc(v1 uint8, v2 uint8, v3 uint8) (uint8, uint8, uint8) {
 	value3 := uint16(v3)
 	result := value1 - value2 - value3
 	xorval := result ^ value1 ^ value2
-	// fmt.Println(value1, value2, value3, result, xorval)
 	hcarry := (xorval & 16) ^ 16 // ???
 	carry := (xorval >> 8) & 1
 	return uint8(result), uint8(carry), uint8(hcarry)
 }
 
-func (p *CPU) Op8(n uint8, v uint8) {
+func (p *Intel8080) Op8(n uint8, v uint8) {
 	switch n {
 	case 0:
 		// ADD R0 / ADI n
-		r, c, hc := op_adc(p.GetA(), v, 0)
+		r, c, hc := op_adc(p.Reg.A, v, 0)
 		p.SetA(r)
 		p.SetF(FlagTable[r] | c | hc)
 	case 1:
 		// ADC R0 / ACI n
-		r, c, hc := op_adc(p.GetA(), v, p.GetF()&1)
+		r, c, hc := op_adc(p.Reg.A, v, p.Reg.F&1)
 		p.SetA(r)
 		p.SetF(FlagTable[r] | c | hc)
 	case 2:
 		// SUB R0 / SUI n
-		r, c, hc := op_sbc(p.GetA(), v, 0)
+		r, c, hc := op_sbc(p.Reg.A, v, 0)
 		p.SetA(r)
 		p.SetF(FlagTable[r] | c | hc)
 	case 3:
 		// SBB R0 / SBI n
-		r, c, hc := op_sbc(p.GetA(), v, p.GetF()&1)
+		r, c, hc := op_sbc(p.Reg.A, v, p.Reg.F&1)
 		p.SetA(r)
 		p.SetF(FlagTable[r] | c | hc)
 	case 4:
 		// ANA R0 / ANI n
-		a := p.GetA()
+		a := p.Reg.A
 		r := a & v
 		p.SetA(r)
 		hcarry := ((a | v) & 0x08) << 1
 		p.SetF(FlagTable[r] | hcarry)
 	case 5:
 		// XRA R0 / XRI n
-		var r uint8 = p.GetA() ^ v
+		var r uint8 = p.Reg.A ^ v
 		p.SetA(r)
 		p.SetF(FlagTable[r])
 	case 6:
 		// ORA R0 / ORI n
-		var r uint8 = p.GetA() | v
+		var r uint8 = p.Reg.A | v
 		p.SetA(r)
 		p.SetF(FlagTable[r])
 	case 7:
 		// CMP R0 / CPI n
-		r, c, hc := op_sbc(p.GetA(), v, 0)
+		r, c, hc := op_sbc(p.Reg.A, v, 0)
 		p.SetF(FlagTable[r] | c | hc)
 	}
 }
 
-func (p *CPU) Op() {
+func (p *Intel8080) Op() {
 	// https://pastraiser.com/cpu/i8080/i8080_opcodes.html
 	// http://dunfield.classiccmp.org/r/8080.txt
 	op := p.Fetch8()
@@ -680,16 +638,16 @@ func (p *CPU) Op() {
 			switch op6 >> 4 {
 			case 0, 1:
 				// STAX
-				p.Memory.Write(p.GetR16(op6>>4), p.GetA())
+				p.Memory.Write(p.GetR16(op6>>4), p.Reg.A)
 			case 2:
 				// SHLD
 				nn := p.Fetch16()
-				p.Memory.Write(nn, p.GetL())
-				p.Memory.Write(nn+1, p.GetH())
+				p.Memory.Write(nn, p.Reg.L)
+				p.Memory.Write(nn+1, p.Reg.H)
 			case 3:
 				// STA
 				nn := p.Fetch16()
-				p.Memory.Write(nn, p.GetA())
+				p.Memory.Write(nn, p.Reg.A)
 			}
 		case 3:
 			// INX
@@ -702,7 +660,7 @@ func (p *CPU) Op() {
 			if (v & 15) == 0 {
 				hcarry = 0x10
 			}
-			p.SetF(FlagTable[v] | hcarry | (p.GetF() & 1))
+			p.SetF(FlagTable[v] | hcarry | (p.Reg.F & 1))
 		case 5, 13:
 			// DCR
 			v := p.GetR8(op6>>3) - 1
@@ -712,7 +670,7 @@ func (p *CPU) Op() {
 			if (v & 15) == 15 {
 				hcarry = 0x00
 			}
-			p.SetF(FlagTable[v] | hcarry | (p.GetF() & 1))
+			p.SetF(FlagTable[v] | hcarry | (p.Reg.F & 1))
 		case 6, 14:
 			// MVI
 			v := p.Fetch8()
@@ -721,32 +679,32 @@ func (p *CPU) Op() {
 			switch op6 >> 3 {
 			case 0:
 				// RLC
-				a := p.GetA()
+				a := p.Reg.A
 				a = (a << 1) | ((a >> 7) & 1)
 				p.SetA(a)
-				p.SetF(p.GetF()&0xfe | (a & 1))
+				p.SetF(p.Reg.F&0xfe | (a & 1))
 			case 1:
 				// RRC
-				a := p.GetA()
-				p.SetF(p.GetF()&0xfe | (a & 1))
+				a := p.Reg.A
+				p.SetF(p.Reg.F&0xfe | (a & 1))
 				a = (a >> 1) | ((a << 7) & 0x80)
 				p.SetA(a)
 			case 2:
 				// RAL
-				a := p.GetA()
-				v := (a << 1) | (p.GetF() & 1)
+				a := p.Reg.A
+				v := (a << 1) | (p.Reg.F & 1)
 				p.SetA(v)
-				p.SetF(p.GetF()&0xfe | ((a >> 7) & 1))
+				p.SetF(p.Reg.F&0xfe | ((a >> 7) & 1))
 			case 3:
 				// RAR
-				a := p.GetA()
-				v := (a >> 1) | ((p.GetF() << 7) & 0x80)
+				a := p.Reg.A
+				v := (a >> 1) | ((p.Reg.F << 7) & 0x80)
 				p.SetA(v)
-				p.SetF(p.GetF()&0xfe | (a & 1))
+				p.SetF(p.Reg.F&0xfe | (a & 1))
 			case 4:
 				// DAA
-				a := p.GetA()
-				f := p.GetF()
+				a := p.Reg.A
+				f := p.Reg.F
 				var adj uint8 = 0
 				if (f&0x10) != 0 || (a&0x0f) >= 0x0a {
 					adj += 0x06
@@ -760,13 +718,13 @@ func (p *CPU) Op() {
 				p.SetF(FlagTable[r] | (f & 0x01) | hc)
 			case 5:
 				// CMA
-				p.SetA(p.GetA() ^ 0xff)
+				p.SetA(p.Reg.A ^ 0xff)
 			case 6:
 				// STC
-				p.SetF(p.GetF() | 1)
+				p.SetF(p.Reg.F | 1)
 			case 7:
 				// CMC
-				p.SetF(p.GetF() ^ 1)
+				p.SetF(p.Reg.F ^ 1)
 			}
 		case 9:
 			// DAD
@@ -778,7 +736,7 @@ func (p *CPU) Op() {
 				c = 1
 			}
 			p.SetHL(d)
-			p.SetF(p.GetF()&0xfe | c)
+			p.SetF(p.Reg.F&0xfe | c)
 		case 10:
 			switch op6 >> 4 {
 			case 0, 1:
@@ -833,13 +791,13 @@ func (p *CPU) Op() {
 				p.SetPC(nn)
 			case 1:
 				// OUT
-				a := p.GetA()
+				a := p.Reg.A
 				nn := uint16(p.Fetch8()) + (uint16(a) << 8)
 				p.IOPort.Write(nn, a)
 			case 2:
 				// XTHL
-				v := p.Read16(p.GetSP())
-				p.Write16(p.GetSP(), p.GetHL())
+				v := p.Read16(p.Reg.SP)
+				p.Write16(p.Reg.SP, p.GetHL())
 				p.SetHL(v)
 			case 3:
 				// DI
@@ -849,7 +807,7 @@ func (p *CPU) Op() {
 			// CALL CC
 			nn := p.Fetch16()
 			if p.CC(op6 >> 3) {
-				p.Push16(p.GetPC())
+				p.Push16(p.Reg.PC)
 				p.SetPC(nn)
 			}
 		case 5:
@@ -861,7 +819,7 @@ func (p *CPU) Op() {
 			p.Op8(op6>>3, v)
 		case 7, 15:
 			// RST
-			p.Push16(p.GetPC())
+			p.Push16(p.Reg.PC)
 			p.SetPC(uint16(op6 & 0x38))
 		case 9:
 			switch op6 >> 4 {
@@ -879,7 +837,7 @@ func (p *CPU) Op() {
 			switch op6 >> 4 {
 			case 1:
 				// IN
-				a := p.GetA()
+				a := p.Reg.A
 				nn := uint16(p.Fetch8()) + (uint16(a) << 8)
 				p.SetA(p.IOPort.Read(nn))
 			case 2:
@@ -895,7 +853,7 @@ func (p *CPU) Op() {
 			if op == 0xcd {
 				// CALL
 				nn := p.Fetch16()
-				p.Push16(p.GetPC())
+				p.Push16(p.Reg.PC)
 				p.SetPC(nn)
 			}
 		}
@@ -903,7 +861,7 @@ func (p *CPU) Op() {
 	p.Instructions += 1
 }
 
-func (p *CPU) Reset() {
+func (p *Intel8080) Reset() {
 	p.CanInterrupt = true
 	p.Halted = false
 	p.FetchCount = 0
@@ -920,15 +878,15 @@ func (p *CPU) Reset() {
 	p.Reg.L = 0
 }
 
-func (p *CPU) Interrupt(addr uint16) {
+func (p *Intel8080) Interrupt(addr uint16) {
 	if p.CanInterrupt {
 		p.CanInterrupt = false
-		p.Push16(p.GetPC())
+		p.Push16(p.Reg.PC)
 		p.SetPC(addr)
 	}
 }
 
-func (p *CPU) Exec(n int, debugFuc func(*CPU)) int {
+func (p *Intel8080) Exec(n int, debugFuc func(*Intel8080)) int {
 	startFetchCount := p.FetchCount
 	for i := 0; i < n; i++ {
 		if debugFuc != nil {
@@ -942,7 +900,7 @@ func (p *CPU) Exec(n int, debugFuc func(*CPU)) int {
 	return p.FetchCount - startFetchCount
 }
 
-func (p *CPU) Status() string {
+func (p *Intel8080) Status() string {
 	hl := uint16(p.Reg.L) | (uint16(p.Reg.H) << 8)
 	m := p.Memory.Read(hl)
 	// op := p.Memory.Read(pc)
