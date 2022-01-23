@@ -4,3 +4,6 @@ bk/
 cpm
 invaders
 tester
+!cmd/cpm
+!cmd/invaders
+!cmd/tester

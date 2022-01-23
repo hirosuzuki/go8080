@@ -1,0 +1,34 @@
+        ORG     $0000
+
+START:
+        HALT
+
+        ORG     $0005
+        JP      SYS_CALL
+
+        ORG     $00c0
+
+SYS_CALL:
+        LD      A,C
+        CP      $02
+        JP      Z,SYS_CALL_2
+        CP      $09
+        JP      Z,SYS_CALL_9
+        HALT
+
+SYS_CALL_2:
+        LD      A,E
+        OUT     (1),A
+        RET
+
+SYS_CALL_9:
+        LD      A,(DE)
+        CP      '$'
+        RET     Z
+        OUT     (1),A
+        INC     DE
+        JP      SYS_CALL_9
+
+        DS      $100 - $
+
+        END
